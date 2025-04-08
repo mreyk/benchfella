@@ -8,14 +8,21 @@ defmodule Benchfella.Snapshot do
 
   def prepare(duration, mem_stats?, sys_mem_stats?, results) do
     [
-      "duration:", to_string(duration), ";",
-      "mem stats:", to_string(mem_stats?), ";",
-      "sys mem stats:", to_string(sys_mem_stats?),
+      "duration:",
+      to_string(duration),
+      ";",
+      "mem stats:",
+      to_string(mem_stats?),
+      ";",
+      "sys mem stats:",
+      to_string(sys_mem_stats?),
       "\nmodule;test;tags;iterations;elapsed\n",
       Enum.map(results, fn
         {{mod, fun}, {iter, elapsed, _mem_stats}} ->
-          :io_lib.format('~s\t~s\t\t~B\t~B~n', [inspect(mod), "#{fun}", iter, elapsed])
-        _otherwise -> ""
+          :io_lib.format(~c"~s\t~s\t\t~B\t~B~n", [inspect(mod), "#{fun}", iter, elapsed])
+
+        _otherwise ->
+          ""
       end)
     ]
   end
@@ -38,6 +45,7 @@ defmodule Benchfella.Snapshot do
           String.split(tags, ",")
           |> Enum.map(&String.trim/1)
           |> Enum.reject(&(&1 == ""))
+
         iter = String.to_integer(iter)
         elapsed = String.to_integer(elapsed)
         {mod, test, tags, iter, elapsed}
@@ -57,34 +65,45 @@ defmodule Benchfella.Snapshot do
     {test_map1, name_set1} = extract_test_names(tests1)
     {test_map2, name_set2} = extract_test_names(tests2)
     common_tests = MapSet.intersection(name_set1, name_set2)
-    diffs = Enum.reduce(common_tests, %{}, fn key, diffs ->
-      {count, elapsed} = test_map1[key]
-      result1 = elapsed / count
 
-      {count, elapsed} = test_map2[key]
-      result2 = elapsed / count
+    diffs =
+      Enum.reduce(common_tests, %{}, fn key, diffs ->
+        {count, elapsed} = test_map1[key]
+        result1 = elapsed / count
 
-      Map.put(diffs, key, diff(result1, result2, format))
-    end)
-    grouped_diffs = Enum.reduce(diffs, %{}, fn {{mod, test}, diff}, groups ->
-      Map.update(groups, mod, Map.put(%{}, test, diff), &Map.put(&1, test, diff))
-    end)
+        {count, elapsed} = test_map2[key]
+        result2 = elapsed / count
+
+        Map.put(diffs, key, diff(result1, result2, format))
+      end)
+
+    grouped_diffs =
+      Enum.reduce(diffs, %{}, fn {{mod, test}, diff}, groups ->
+        Map.update(groups, mod, Map.put(%{}, test, diff), &Map.put(&1, test, diff))
+      end)
+
     {grouped_diffs, symm_diff(name_set1, name_set2) |> Enum.into([])}
   end
 
   defp extract_test_names(tests) do
-    Enum.reduce(tests, {%{}, MapSet.new}, fn {mod, test, _tags, iter, elapsed}, {map, set} ->
+    Enum.reduce(tests, {%{}, MapSet.new()}, fn {mod, test, _tags, iter, elapsed}, {map, set} ->
       name = {mod, test}
       {Map.put(map, name, {iter, elapsed}), MapSet.put(set, name)}
     end)
   end
 
-  def format_percent(0.0) do
+  def format_percent(+0.0) do
     "--"
   end
 
   def format_percent(num) do
-    str = if num > 0 do <<?+>> else <<>> end
+    str =
+      if num > 0 do
+        <<?+>>
+      else
+        <<>>
+      end
+
     str <> :erlang.float_to_binary(num, decimals: @precision) <> "%"
   end
 
@@ -108,13 +127,16 @@ defmodule Benchfella.Snapshot do
       "options": #{Json.encode(options)},
       "tests": #{json_encode_tests(tests)}
     }
-    """ |> String.trim_trailing
+    """
+    |> String.trim_trailing()
   end
 
   def snapshots_to_json(snapshots) when is_list(snapshots) do
-    fields = Enum.map(snapshots, fn {name, snapshot} ->
-      ~s("#{name}": #{to_json(snapshot)})
-    end)
+    fields =
+      Enum.map(snapshots, fn {name, snapshot} ->
+        ~s("#{name}": #{to_json(snapshot)})
+      end)
+
     "{" <> Enum.join(fields, ",") <> "}"
   end
 
@@ -125,7 +147,7 @@ defmodule Benchfella.Snapshot do
         test: test,
         tags: tags,
         iter: iter,
-        elapsed: elapsed,
+        elapsed: elapsed
       }
     end)
     |> Json.encode()

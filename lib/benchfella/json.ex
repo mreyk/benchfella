@@ -4,7 +4,7 @@ defmodule Benchfella.Json do
   def encode(true), do: "true"
   def encode(false), do: "false"
   def encode(num) when is_number(num), do: "#{num}"
-  def encode(%{}=map), do: encode_map(map)
+  def encode(%{} = map), do: encode_map(map)
   def encode(list) when is_list(list), do: encode_list(list)
   def encode(bin) when is_binary(bin), do: ~s("#{bin}")
 
@@ -14,6 +14,7 @@ defmodule Benchfella.Json do
         ~s("#{k}":#{encode(v)})
       end)
       |> Enum.join(",")
+
     "{" <> kvstring <> "}"
   end
 
@@ -21,6 +22,7 @@ defmodule Benchfella.Json do
     liststr =
       Enum.map(list, &encode/1)
       |> Enum.join(",")
+
     "[" <> liststr <> "]"
   end
 end

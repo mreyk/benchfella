@@ -29,68 +29,85 @@ defmodule Benchfella do
     opts = Keyword.merge(opts, cli_opts)
 
     # spawn a zombie process to keep the table alive
-    pid = spawn(fn ->
-      receive do end
-    end)
+    pid =
+      spawn(fn ->
+        receive do
+        end
+      end)
+
     :ets.new(@bench_tab, [:public, :named_table, :ordered_set, {:heir, pid, nil}])
 
     {collect_mem_stats, sys_mem_stats} =
       case Keyword.fetch(opts, :mem_stats) do
         {:ok, :include_sys} -> {true, true}
-        {:ok, true}         -> {true, false}
-        {:ok, false}        -> {false, false}
-        :error              -> {false, false}
+        {:ok, true} -> {true, false}
+        {:ok, false} -> {false, false}
+        :error -> {false, false}
       end
 
     format = Keyword.get(opts, :format, :plain)
     verbose = Keyword.get(opts, :verbose, true)
 
-    outdir = case Keyword.fetch(opts, :output) do
-      {:ok, path} when is_binary(path) -> path
-      :error -> @default_outdir
-    end
+    outdir =
+      case Keyword.fetch(opts, :output) do
+        {:ok, path} when is_binary(path) -> path
+        :error -> @default_outdir
+      end
+
     if outdir != "", do: File.mkdir_p!(outdir)
 
     System.at_exit(fn
-      0 -> run(Keyword.get(opts, :duration, @bench_sec) |> sec2musec,
-                    verbose, format, outdir, collect_mem_stats, sys_mem_stats)
-      status -> status
+      0 ->
+        run(
+          Keyword.get(opts, :duration, @bench_sec) |> sec2musec,
+          verbose,
+          format,
+          outdir,
+          collect_mem_stats,
+          sys_mem_stats
+        )
+
+      status ->
+        status
     end)
   end
 
   defp sec2musec(sec), do: trunc(sec * 1_000_000)
-  defp musec2sec(musec), do: Float.round(musec/1_000_000, 2)
+  defp musec2sec(musec), do: Float.round(musec / 1_000_000, 2)
 
   defp log(msg), do: IO.puts(:stderr, msg)
 
   def run(bench_time, verbose, format, outdir, mem_stats, sys_mem_stats) do
-    #if format == :machine do
-      if mem_stats or sys_mem_stats do
-        log ">> 'mem stats' flag is currently ignored"
-      end
-      mem_stats = false
-      sys_mem_stats = false
-    #end
+    # if format == :machine do
+    if mem_stats or sys_mem_stats do
+      log(">> 'mem stats' flag is currently ignored")
+    end
+
+    mem_stats = false
+    sys_mem_stats = false
+    # end
 
     if verbose do
-      log "Settings:"
-      log "  duration:      #{musec2sec(bench_time)} s"
-      #log "  mem stats:     #{mem_stats}"
-      #log "  sys mem stats: #{sys_mem_stats}"
-      log ""
+      log("Settings:")
+      log("  duration:      #{musec2sec(bench_time)} s")
+      # log "  mem stats:     #{mem_stats}"
+      # log "  sys mem stats: #{sys_mem_stats}"
+      log("")
     end
 
     bench_count = :ets.info(@bench_tab, :size)
     bench_config = {bench_time, mem_stats}
-    {total_time, results} = :timer.tc(fn ->
-      prepare_tests_for_running(@bench_tab)
-      |> run_grouped_tests(bench_count, verbose, bench_config)
-    end)
+
+    {total_time, results} =
+      :timer.tc(fn ->
+        prepare_tests_for_running(@bench_tab)
+        |> run_grouped_tests(bench_count, verbose, bench_config)
+      end)
 
     if verbose do
       sec = Float.round(total_time / 1_000_000, 2)
-      log ""
-      log "Finished in #{sec} seconds"
+      log("")
+      log("Finished in #{sec} seconds")
     end
 
     print_results(results, bench_time, format, outdir, mem_stats, sys_mem_stats)
@@ -106,21 +123,27 @@ defmodule Benchfella do
 
     # for each group we return the list of its results
     Enum.flat_map(groups, fn {mod, tests} ->
-      if follow, do: log ["## ", inspect(mod)]
+      if follow, do: log(["## ", inspect(mod)])
 
-      log_msg_func = fn func -> if follow do
-        "[#{format_now()}] #{Counter.next(counter)}/#{count}: #{func}" end
-      end
-      spawn_with_exit(fn ->
-        result = case run_setup_hook(mod) do
-          {:ok, mod_context} ->
-            results = run_individual_tests(tests, log_msg_func, bench_config, mod_context)
-            run_teardown_hook(mod, mod_context)
-            results
-          _ ->
-            log "Skipping all tests in #{inspect mod}\n"
-            [nil]
+      log_msg_func = fn func ->
+        if follow do
+          "[#{format_now()}] #{Counter.next(counter)}/#{count}: #{func}"
         end
+      end
+
+      spawn_with_exit(fn ->
+        result =
+          case run_setup_hook(mod) do
+            {:ok, mod_context} ->
+              results = run_individual_tests(tests, log_msg_func, bench_config, mod_context)
+              run_teardown_hook(mod, mod_context)
+              results
+
+            _ ->
+              log("Skipping all tests in #{inspect(mod)}\n")
+              [nil]
+          end
+
         exit({:normal, result})
       end)
     end)
@@ -134,6 +157,7 @@ defmodule Benchfella do
 
   defp run_bench({mod, func}, log_msg_func, config, mod_context) do
     func_name = bench_func_name(func)
+
     run_bench_with_context(mod, func_name, mod_context, log_msg_func.(func), fn context ->
       inputs = apply(mod, func_name, [context])
       measure_func(mod, func_name, context, inputs, config)
@@ -142,16 +166,19 @@ defmodule Benchfella do
 
   defp run_bench_with_context(mod, func_name, mod_context, log_msg, func) do
     spawn_with_exit(fn ->
-      result = case run_before_each_hook(mod, mod_context) do
-        {:ok, bench_context} ->
-          if log_msg, do: log log_msg
-          result = func.(bench_context)
-          run_after_each_hook(mod, bench_context)
-          result
-        _ ->
-          log "Skipping #{inspect mod}.#{func_name}\n"
-          nil
-      end
+      result =
+        case run_before_each_hook(mod, mod_context) do
+          {:ok, bench_context} ->
+            if log_msg, do: log(log_msg)
+            result = func.(bench_context)
+            run_after_each_hook(mod, bench_context)
+            result
+
+          _ ->
+            log("Skipping #{inspect(mod)}.#{func_name}\n")
+            nil
+        end
+
       exit({:normal, result})
     end)
   end
@@ -168,9 +195,10 @@ defmodule Benchfella do
   end
 
   defp print_formatted_data(iodata, format) do
-    IO.write "\n"
+    IO.write("\n")
+
     IO.iodata_to_binary(iodata)
-    |> Snapshot.parse
+    |> Snapshot.parse()
     |> Snapshot.print(format)
   end
 
@@ -188,8 +216,11 @@ defmodule Benchfella do
     # FIXME: think about including additional info in the filename, like
     # indication of which tests were run or test settings
     {{year, month, day}, {hour, min, sec}} = :calendar.local_time()
-    :io_lib.format('~B-~2..0B-~2..0B_~2..0B-~2..0B-~2..0B.snapshot',
-                   [year, month, day, hour, min, sec])
+
+    :io_lib.format(
+      ~c"~B-~2..0B-~2..0B_~2..0B-~2..0B-~2..0B.snapshot",
+      [year, month, day, hour, min, sec]
+    )
   end
 
   #  defp print_mem_stats(n, {mem_before, mem_after, mem_after_gc,
@@ -231,29 +262,38 @@ defmodule Benchfella do
   #  defp b2kib(bytes), do: Float.round(bytes/1024, 2)
 
   defp format_now() do
-    {_, {h,m,s}} = :erlang.localtime()
-    :io_lib.format('~2.10.0B:~2.10.0B:~2.10.0B', [h, m, s])
+    {_, {h, m, s}} = :erlang.localtime()
+
+    :io_lib.format(~c"~2.10.0B:~2.10.0B:~2.10.0B", [h, m, s])
     |> List.to_string()
   end
 
-  defp measure_func(mod, f, context, inputs, {_, collect_mem_stats}=config) do
+  defp measure_func(mod, f, context, inputs, {_, collect_mem_stats} = config) do
     {elapsed, result, n, mem_stats} = measure_n(mod, f, context, inputs, 1, collect_mem_stats)
     measure_func(mod, f, context, inputs, {n, elapsed, result, mem_stats}, config)
   end
 
-  defp measure_func(mod, f, context, inputs, {n, elapsed, result, _}, {bench_time, collect_mem_stats}=config)
-    when elapsed < bench_time
-  do
+  defp measure_func(
+         mod,
+         f,
+         context,
+         inputs,
+         {n, elapsed, result, _},
+         {bench_time, collect_mem_stats} = config
+       )
+       when elapsed < bench_time do
     n = predict_n(n, elapsed, bench_time)
+
     case measure_n(mod, f, context, inputs, n, collect_mem_stats) do
       {elapsed, ^result, n, mem_stats} ->
         measure_func(mod, f, context, inputs, {n, elapsed, result, mem_stats}, config)
+
       {_, other, _, _} ->
-        fatal """
+        fatal("""
         Different return values between iterations.
-         Expected: #{inspect result}
-              Got: #{inspect other}
-        """
+         Expected: #{inspect(result)}
+              Got: #{inspect(other)}
+        """)
     end
   end
 
@@ -264,25 +304,29 @@ defmodule Benchfella do
   defp predict_n(n, elapsed, bench_time) do
     last = n
     quot = div(elapsed, n)
-    n = if quot == 0 do
-      1_000_000_000
-    else
-      div(bench_time, quot)
-    end
+
+    n =
+      if quot == 0 do
+        1_000_000_000
+      else
+        div(bench_time, quot)
+      end
+
     # Run more iterations than we think we'll need for a second (1.5x).
     # Don't grow too fast in case we had timing errors previously.
     # Be sure to run at least one more than last time.
-    max(min(1.5*n, 10*last), last+1) |> round_up()
+    max(min(1.5 * n, 10 * last), last + 1) |> round_up()
   end
 
   # round n up to an easy to read number; one of 1eX, 2eX, 5eX
   defp round_up(n) do
     base = round_down(trunc(n), 10)
+
     cond do
-      n <= base   -> base
-      n <= 2*base -> 2*base
-      n <= 5*base -> 5*base
-      true        -> 10*base
+      n <= base -> base
+      n <= 2 * base -> 2 * base
+      n <= 5 * base -> 5 * base
+      true -> 10 * base
     end
   end
 
@@ -291,7 +335,7 @@ defmodule Benchfella do
   end
 
   defp round_down(n, p, count) when n >= p do
-    round_down(div(n, p), p, count+1)
+    round_down(div(n, p), p, count + 1)
   end
 
   defp round_down(_, p, count) do
@@ -300,32 +344,43 @@ defmodule Benchfella do
 
   defp measure_n(mod, f, context, inputs, n, collect_mem_stats) do
     parent = self()
-    pid = spawn_link(fn ->
-      pid = self()
-      {mem_before, sys_mem_before} = if collect_mem_stats do
-        {:memory, mem_before} = :erlang.process_info(pid, :memory)
-        sys_mem_before = :erlang.memory()
-        {mem_before, sys_mem_before}
-      else
-        {nil, nil}
-      end
 
-      result = measure_once(mod, f, n, context, inputs)
+    pid =
+      spawn_link(fn ->
+        pid = self()
 
-      mem_stats = if collect_mem_stats do
-        {:memory, mem_after} = :erlang.process_info(pid, :memory)
-        :erlang.garbage_collect()
-        {:memory, mem_after_gc} = :erlang.process_info(pid, :memory)
-        sys_mem_after = :erlang.memory()
+        {mem_before, sys_mem_before} =
+          if collect_mem_stats do
+            {:memory, mem_before} = :erlang.process_info(pid, :memory)
+            sys_mem_before = :erlang.memory()
+            {mem_before, sys_mem_before}
+          else
+            {nil, nil}
+          end
 
-        {
-          mem_before, mem_after, mem_after_gc,
-          sys_mem_before[:binary], sys_mem_before[:atom],
-          sys_mem_after[:binary], sys_mem_after[:atom]
-        }
-      end
-      send(parent, {pid, result, mem_stats})
-    end)
+        result = measure_once(mod, f, n, context, inputs)
+
+        mem_stats =
+          if collect_mem_stats do
+            {:memory, mem_after} = :erlang.process_info(pid, :memory)
+            :erlang.garbage_collect()
+            {:memory, mem_after_gc} = :erlang.process_info(pid, :memory)
+            sys_mem_after = :erlang.memory()
+
+            {
+              mem_before,
+              mem_after,
+              mem_after_gc,
+              sys_mem_before[:binary],
+              sys_mem_before[:atom],
+              sys_mem_after[:binary],
+              sys_mem_after[:atom]
+            }
+          end
+
+        send(parent, {pid, result, mem_stats})
+      end)
+
     receive do
       {^pid, {elapsed, result}, mem_stats} -> {elapsed, result, n, mem_stats}
     end
@@ -338,6 +393,7 @@ defmodule Benchfella do
   def add_bench(mod, func_name) do
     validate_name!(inspect(mod))
     validate_name!(mod, Atom.to_string(func_name))
+
     try do
       :ets.insert(@bench_tab, {{mod, func_name}})
     catch
@@ -357,22 +413,23 @@ defmodule Benchfella do
   defp validate_name!(mod, name) do
     if not String.printable?(name) or Regex.match?(~r/\n|\t/, name) do
       module = if mod, do: "#{inspect(mod)}."
-      fatal """
-      Invalid characters in the name #{module}#{inspect name}.
+
+      fatal("""
+      Invalid characters in the name #{module}#{inspect(name)}.
          Only printable characters are allowed except for \\t and \\n.
-      """
+      """)
     end
   end
 
-  defmacro bench(name, [do: body]) do
+  defmacro bench(name, do: body) do
     gen_bench_funcs(name, [], body)
   end
 
-  defmacro bench(name, inputs, [do: body]) do
+  defmacro bench(name, inputs, do: body) do
     gen_bench_funcs(name, inputs, body)
   end
 
-  defmacro setup_all([do: body]) do
+  defmacro setup_all(do: body) do
     quote do
       def unquote(@setup_func)() do
         unquote(body)
@@ -380,7 +437,7 @@ defmodule Benchfella do
     end
   end
 
-  defmacro teardown_all(mod_context, [do: body]) do
+  defmacro teardown_all(mod_context, do: body) do
     quote do
       def unquote(@teardown_func)(unquote(mod_context)) do
         unquote(body)
@@ -388,7 +445,7 @@ defmodule Benchfella do
     end
   end
 
-  defmacro before_each_bench(mod_context, [do: body]) do
+  defmacro before_each_bench(mod_context, do: body) do
     quote do
       def unquote(@before_each_func)(unquote(mod_context)) do
         unquote(body)
@@ -396,7 +453,7 @@ defmodule Benchfella do
     end
   end
 
-  defmacro after_each_bench(bench_context, [do: body]) do
+  defmacro after_each_bench(bench_context, do: body) do
     quote do
       def unquote(@after_each_func)(unquote(bench_context)) do
         unquote(body)
@@ -405,21 +462,28 @@ defmodule Benchfella do
   end
 
   defp gen_bench_funcs(name, inputs, body) do
-    {vars, values} = Enum.reduce(inputs, {[], []}, fn {name, {func, meta, args}}, {vars, values} ->
-      var = Macro.var(name, nil)
-      val = {func, meta, args}
-      {[var|vars], [val|values]}
-    end)
-    ignored_vars = Enum.map(vars, fn _ -> quote do _ end end)
+    {vars, values} =
+      Enum.reduce(inputs, {[], []}, fn {name, {func, meta, args}}, {vars, values} ->
+        var = Macro.var(name, nil)
+        val = {func, meta, args}
+        {[var | vars], [val | values]}
+      end)
+
+    ignored_vars =
+      Enum.map(vars, fn _ ->
+        quote do
+          _
+        end
+      end)
 
     quote bind_quoted: [
-      fella: __MODULE__,
-      bench_name: name,
-      body: Macro.escape(body),
-      values: Macro.escape(values),
-      vars: Macro.escape(vars),
-      ignored_vars: Macro.escape(ignored_vars)
-    ] do
+            fella: __MODULE__,
+            bench_name: name,
+            body: Macro.escape(body),
+            values: Macro.escape(values),
+            vars: Macro.escape(vars),
+            ignored_vars: Macro.escape(ignored_vars)
+          ] do
       fella.add_bench(__MODULE__, String.to_atom(bench_name))
 
       func_name = fella.bench_func_name(bench_name)
@@ -434,7 +498,7 @@ defmodule Benchfella do
       end
 
       def unquote(func_name)(n, _, var!(bench_context), unquote_splicing(vars)) do
-        unquote(func_name)(n-1, unquote(body), var!(bench_context), unquote_splicing(vars))
+        unquote(func_name)(n - 1, unquote(body), var!(bench_context), unquote_splicing(vars))
       end
     end
   end
@@ -443,13 +507,19 @@ defmodule Benchfella do
     if function_exported?(mod, @setup_func, 0) do
       try do
         case apply(mod, @setup_func, []) do
-          {:ok, context} -> {:ok, context}
-          other -> raise "Expected #{inspect mod}.#{@setup_func}/0 to return {:ok, <term>}. "
-                      <> "Got #{inspect other}"
+          {:ok, context} ->
+            {:ok, context}
+
+          other ->
+            raise "Expected #{inspect(mod)}.#{@setup_func}/0 to return {:ok, <term>}. " <>
+                    "Got #{inspect(other)}"
         end
       catch
         kind, error ->
-          IO.puts :stderr, Exception.format(kind, error, pruned_stacktrace()) |> String.trim_trailing
+          IO.puts(
+            :stderr,
+            Exception.format(kind, error, pruned_stacktrace(__STACKTRACE__)) |> String.trim_trailing()
+          )
       end
     else
       {:ok, nil}
@@ -461,7 +531,7 @@ defmodule Benchfella do
       try do
         apply(mod, @teardown_func, [mod_context])
       catch
-        kind, error -> IO.puts :stderr, Exception.format(kind, error, pruned_stacktrace())
+        kind, error -> IO.puts(:stderr, Exception.format(kind, error, pruned_stacktrace(__STACKTRACE__)))
       end
     end
   end
@@ -470,13 +540,19 @@ defmodule Benchfella do
     if function_exported?(mod, @before_each_func, 1) do
       try do
         case apply(mod, @before_each_func, [mod_context]) do
-          {:ok, bench_context} -> {:ok, bench_context}
-          other -> raise "Expected #{inspect mod}.#{@before_each_func}/1 to return {:ok, <term>}. "
-                      <> "Got #{inspect other}"
+          {:ok, bench_context} ->
+            {:ok, bench_context}
+
+          other ->
+            raise "Expected #{inspect(mod)}.#{@before_each_func}/1 to return {:ok, <term>}. " <>
+                    "Got #{inspect(other)}"
         end
       catch
         kind, error ->
-          IO.puts :stderr, Exception.format(kind, error, pruned_stacktrace()) |> String.trim_trailing
+          IO.puts(
+            :stderr,
+            Exception.format(kind, error, pruned_stacktrace(__STACKTRACE__)) |> String.trim_trailing()
+          )
       end
     end
   end
@@ -486,7 +562,7 @@ defmodule Benchfella do
       try do
         apply(mod, @after_each_func, [bench_context])
       catch
-        kind, error -> IO.puts :stderr, Exception.format(kind, error, pruned_stacktrace())
+        kind, error -> IO.puts(:stderr, Exception.format(kind, error, pruned_stacktrace(__STACKTRACE__)))
       end
     end
   end
@@ -494,21 +570,24 @@ defmodule Benchfella do
   defp spawn_with_exit(func) do
     Process.flag(:trap_exit, true)
     pid = spawn_link(func)
+
     receive do
-      {:EXIT, ^pid, {:normal, result}} -> result
+      {:EXIT, ^pid, {:normal, result}} ->
+        result
+
       {:EXIT, ^pid, error} ->
-        IO.puts :stderr, Exception.format(:exit, Exception.normalize(:exit, error))
+        IO.puts(:stderr, Exception.format(:exit, Exception.normalize(:exit, error)))
         nil
     end
   end
 
-  defp pruned_stacktrace do
-    System.stacktrace
+  defp pruned_stacktrace(stacktrace) do
+    stacktrace
     |> Enum.take_while(fn {mod, _, _, _} -> mod != __MODULE__ end)
   end
 
   defp fatal(msg) do
-    IO.puts :stderr, ["** (Error) ", msg]
+    IO.puts(:stderr, ["** (Error) ", msg])
     System.halt(1)
   end
 end

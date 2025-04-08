@@ -4,6 +4,6 @@ defmodule Benchfella.Counter do
   end
 
   def next(counter) do
-    Agent.get_and_update(counter, fn count -> {count, count+1} end)
+    Agent.get_and_update(counter, fn count -> {count, count + 1} end)
   end
 end

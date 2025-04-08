@@ -34,7 +34,7 @@ defmodule Mix.Tasks.Bench.Graph do
 
   """
 
-  @app Mix.Project.config[:app]
+  @app Mix.Project.config()[:app]
   @priv_dir List.to_string(:code.priv_dir(@app))
   @ui_css File.read!(Path.join(@priv_dir, "ui.css"))
   @ui_js File.read!(Path.join(@priv_dir, "ui.js"))
@@ -44,16 +44,23 @@ defmodule Mix.Tasks.Bench.Graph do
 
   def run(args) do
     switches = [no_js: :boolean, n: :integer]
+
     {snapshots, options} =
       case OptionParser.parse(args, strict: switches, aliases: [n: :n]) do
         {opts, [], []} ->
           count = Keyword.get(opts, :n, 2)
           {Util.locate_snapshots(count), opts}
+
         {opts, snapshots, []} ->
           {snapshots, opts}
-        {_, _, [{opt, val}|_]} ->
-          valstr = if val do "=#{val}" end
-          Mix.raise "Invalid option: #{opt}#{valstr}"
+
+        {_, _, [{opt, val} | _]} ->
+          valstr =
+            if val do
+              "=#{val}"
+            end
+
+          Mix.raise("Invalid option: #{opt}#{valstr}")
       end
 
     make_graph(snapshots, Keyword.get(options, :no_js, false))
@@ -65,18 +72,20 @@ defmodule Mix.Tasks.Bench.Graph do
   end
 
   defp make_graph(paths, no_js) do
-    snapshots = Enum.map(paths, fn path ->
-      {path, path |> File.read! |> Snapshot.parse}
-    end)
+    snapshots =
+      Enum.map(paths, fn path ->
+        {path, path |> File.read!() |> Snapshot.parse()}
+      end)
+
     do_make_graph(snapshots, no_js)
   end
 
   defp do_make_graph(snapshots, false) do
-    snapshots |> Snapshot.snapshots_to_json |> make_index
+    snapshots |> Snapshot.snapshots_to_json() |> make_index
   end
 
   defp do_make_graph(_snapshots, true) do
-    Mix.raise "Not implemented yet (sorry)"
+    Mix.raise("Not implemented yet (sorry)")
   end
 
   defp make_index(json) do
@@ -85,10 +94,10 @@ defmodule Mix.Tasks.Bench.Graph do
     File.mkdir_p(graph_dir_path)
     html = index(json, @ui_css, @ui_js)
     File.write!(graph_path, html)
-    IO.puts :stderr, "Wrote #{graph_path}"
+    IO.puts(:stderr, "Wrote #{graph_path}")
   end
 
   require EEx
   path = Path.join([@priv_dir, "templates", "index.html.eex"])
-  EEx.function_from_file :def, :index, path, [:json, :style, :javascript]
+  EEx.function_from_file(:def, :index, path, [:json, :style, :javascript])
 end

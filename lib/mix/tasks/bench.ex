@@ -66,37 +66,46 @@ defmodule Mix.Tasks.Bench do
     load_bench_files(paths)
   end
 
-  @switches [format: :string, quiet: :boolean,
-             duration: :float, output: :string,
-             no_compile: :boolean]
+  @switches [
+    format: :string,
+    quiet: :boolean,
+    duration: :float,
+    output: :string,
+    no_compile: :boolean
+  ]
 
-  @aliases [f: :format, q: :quiet,
-            d: :duration, o: :output]
+  @aliases [f: :format, q: :quiet, d: :duration, o: :output]
 
   defp parse_options(args) do
     case OptionParser.parse(args, strict: @switches, aliases: @aliases) do
-      {opts, paths, []} -> {paths, opts}
+      {opts, paths, []} ->
+        {paths, opts}
+
       {_, _, [{opt, nil} | _]} ->
-        Mix.raise "Invalid option: #{opt}"
+        Mix.raise("Invalid option: #{opt}")
+
       {_, _, [{opt, val} | _]} ->
-        Mix.raise "Invalid option: #{opt}=#{val}"
+        Mix.raise("Invalid option: #{opt}=#{val}")
     end
   end
 
   defp prepare_mix_project(no_compile) do
     # Set up the target project's paths
-    Mix.Project.get!
+    Mix.Project.get!()
     args = ["--no-start"]
-    args = case no_compile do
-      true -> args ++ ["--no-compile"]
-      _    -> args
-    end
+
+    args =
+      case no_compile do
+        true -> args ++ ["--no-compile"]
+        _ -> args
+      end
+
     Mix.Task.run("app.start", args)
   end
 
   defp load_bench_files([]) do
-    Path.wildcard("bench/**/*_bench.exs") ++
-      Path.wildcard("apps/**/bench/**/*_bench.exs")
+    (Path.wildcard("bench/**/*_bench.exs") ++
+       Path.wildcard("apps/**/bench/**/*_bench.exs"))
     |> do_load_bench_files
   end
 
@@ -106,9 +115,10 @@ defmodule Mix.Tasks.Bench do
   end
 
   defp do_load_bench_files([]), do: nil
+
   defp do_load_bench_files(files) do
     load_bench_helper()
-    Kernel.ParallelRequire.files(files)
+    Kernel.ParallelCompiler.require(files)
   end
 
   @helper_path "bench/bench_helper.exs"
@@ -125,6 +135,7 @@ defmodule Mix.Tasks.Bench do
     {no_compile, opts} =
       Enum.reduce(opts, %{}, &normalize_option/2)
       |> Map.pop(:no_compile)
+
     {paths, Map.to_list(opts), no_compile}
   end
 
@@ -141,11 +152,11 @@ defmodule Mix.Tasks.Bench do
   end
 
   defp parse_format(fmt)
-    when fmt in ["raw", "plain", "markdown"] do
+       when fmt in ["raw", "plain", "markdown"] do
     String.to_atom(fmt)
   end
 
   defp parse_format(fmt) do
-    Mix.raise "Unknown format: #{fmt}"
+    Mix.raise("Unknown format: #{fmt}")
   end
 end

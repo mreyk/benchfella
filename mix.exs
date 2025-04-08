@@ -8,7 +8,7 @@ defmodule Benchfella.Mixfile do
     [
       app: :benchfella,
       version: @version,
-      elixir: "~> 1.3",
+      elixir: "~> 1.18.3",
       package: package(),
       deps: deps(),
       docs: docs()
@@ -32,7 +32,7 @@ defmodule Benchfella.Mixfile do
   end
 
   defp deps do
-    [{:ex_doc, "> 0.0.0", only: :dev, runtime: false}]
+    [{:ex_doc, "~> 0.37.3", only: :dev, runtime: false}]
   end
 
   defp docs do

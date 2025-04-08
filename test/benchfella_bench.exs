@@ -1,4 +1,4 @@
-Benchfella.start mem_stats: true
+Benchfella.start(mem_stats: true)
 
 defmodule BenchfellaBench do
   use Benchfella
